@@ -1,0 +1,19 @@
+R_DEF: Internal format may change without notice
+local
+color ic_launcher_background
+color on_primary
+color on_primary_container
+color primary
+color primary_container
+color secondary
+color secondary_container
+drawable ic_launcher_foreground
+id progress_bar
+id status_text
+id surface_view
+layout activity_stream
+mipmap ic_launcher
+mipmap ic_launcher_round
+string app_name
+style Theme.Mac2Droid
+style Theme.Mac2Droid.Fullscreen

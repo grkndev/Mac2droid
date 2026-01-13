@@ -1,0 +1,18 @@
+[
+    {
+        "merged": "com.mac2droid.app-merged_res-58:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.mac2droid.app-main-60:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.mac2droid.app-merged_res-58:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.mac2droid.app-main-60:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "com.mac2droid.app-merged_res-58:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.mac2droid.app-main-60:/drawable/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "/Users/grkndev/.gradle/daemon/8.5/com.mac2droid.app-merged_res-58:/layout_activity_stream.xml.flat",
+        "source": "/Users/grkndev/.gradle/daemon/8.5/com.mac2droid.app-main-60:/layout/activity_stream.xml"
+    }
+]

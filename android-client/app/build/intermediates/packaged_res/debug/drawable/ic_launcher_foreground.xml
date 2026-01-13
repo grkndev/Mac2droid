@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Display/Monitor icon -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,35h48c2.2,0 4,1.8 4,4v26c0,2.2 -1.8,4 -4,4H30c-2.2,0 -4,-1.8 -4,-4V39C26,36.8 27.8,35 30,35z"/>
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M32,39h44v22H32V39z"/>
+    <!-- Stand -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,69h12v4H48z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,73h20v2H44z"/>
+</vector>
