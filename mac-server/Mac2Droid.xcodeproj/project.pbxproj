@@ -1,0 +1,374 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		086A17E6A45353D69F93B096 /* FrameHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5454AB26A6155D1EA38AB82 /* FrameHeader.swift */; };
+		57286C354D78BEDE91FCAEC4 /* ScreenCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4A1721D8841CD53C7298B6 /* ScreenCaptureManager.swift */; };
+		A3EABF04A16DBF07FC181D87 /* VideoEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B107C8C2A07CA1A54EC8B4C /* VideoEncoder.swift */; };
+		AA8DB45052D987A90096E7FB /* Mac2DroidApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40729672682021FD156CD8E3 /* Mac2DroidApp.swift */; };
+		AA9CCD2A0EA7268D7A5A44D3 /* StreamServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8FE9B5A9AF2711DD2944FD /* StreamServer.swift */; };
+		C84BE8450BCA90302333C7E4 /* FramePacketizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8A87CEC4997D3E5C06B12A /* FramePacketizer.swift */; };
+		DB99E8EA4C50F41B275271D6 /* VirtualDisplayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E54C6EB287A56DF123BBF4D9 /* VirtualDisplayManager.swift */; };
+		EFB4EB2321F270D5EEF46656 /* M2DProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBCB5B01EDC34847C5343FBA /* M2DProtocol.swift */; };
+		FB6C480E14486C268E513628 /* StreamConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A610A30B9F45B510B2A31DE8 /* StreamConfig.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0B107C8C2A07CA1A54EC8B4C /* VideoEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEncoder.swift; sourceTree = "<group>"; };
+		1AE51E9216F5A754E3F9B179 /* Mac2Droid.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mac2Droid.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2F4A1721D8841CD53C7298B6 /* ScreenCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCaptureManager.swift; sourceTree = "<group>"; };
+		40729672682021FD156CD8E3 /* Mac2DroidApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mac2DroidApp.swift; sourceTree = "<group>"; };
+		4A8FE9B5A9AF2711DD2944FD /* StreamServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamServer.swift; sourceTree = "<group>"; };
+		7D8A87CEC4997D3E5C06B12A /* FramePacketizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacketizer.swift; sourceTree = "<group>"; };
+		9CD18196846457442A767286 /* Mac2Droid.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Mac2Droid.entitlements; sourceTree = "<group>"; };
+		A610A30B9F45B510B2A31DE8 /* StreamConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamConfig.swift; sourceTree = "<group>"; };
+		C5454AB26A6155D1EA38AB82 /* FrameHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameHeader.swift; sourceTree = "<group>"; };
+		CBCB5B01EDC34847C5343FBA /* M2DProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M2DProtocol.swift; sourceTree = "<group>"; };
+		E0C9F24875666578FA40B115 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E54C6EB287A56DF123BBF4D9 /* VirtualDisplayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayManager.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		29816A5A3C823750C8378BFF /* Protocol */ = {
+			isa = PBXGroup;
+			children = (
+				C5454AB26A6155D1EA38AB82 /* FrameHeader.swift */,
+				CBCB5B01EDC34847C5343FBA /* M2DProtocol.swift */,
+			);
+			path = Protocol;
+			sourceTree = "<group>";
+		};
+		5084BD7F89990E3B7DAE2F68 /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				2F4A1721D8841CD53C7298B6 /* ScreenCaptureManager.swift */,
+				E54C6EB287A56DF123BBF4D9 /* VirtualDisplayManager.swift */,
+			);
+			path = Capture;
+			sourceTree = "<group>";
+		};
+		5A4563B45DD5FA56D5B39948 /* Mac2Droid */ = {
+			isa = PBXGroup;
+			children = (
+				E0C9F24875666578FA40B115 /* Info.plist */,
+				9CD18196846457442A767286 /* Mac2Droid.entitlements */,
+				E963F30EA2CD02698DC0B454 /* App */,
+				5084BD7F89990E3B7DAE2F68 /* Capture */,
+				7DCFAF89F789D101A68A46F8 /* Encoder */,
+				8474B4D1F720B6809C43FBC1 /* Models */,
+				9E8B57FD187AD24EA1EB1CAF /* Network */,
+				29816A5A3C823750C8378BFF /* Protocol */,
+			);
+			path = Mac2Droid;
+			sourceTree = "<group>";
+		};
+		739BA07CF3AFC3D43D4FA885 = {
+			isa = PBXGroup;
+			children = (
+				5A4563B45DD5FA56D5B39948 /* Mac2Droid */,
+				83FFFA6F9626A0BE4555118E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7DCFAF89F789D101A68A46F8 /* Encoder */ = {
+			isa = PBXGroup;
+			children = (
+				0B107C8C2A07CA1A54EC8B4C /* VideoEncoder.swift */,
+			);
+			path = Encoder;
+			sourceTree = "<group>";
+		};
+		83FFFA6F9626A0BE4555118E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1AE51E9216F5A754E3F9B179 /* Mac2Droid.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8474B4D1F720B6809C43FBC1 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A610A30B9F45B510B2A31DE8 /* StreamConfig.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		9E8B57FD187AD24EA1EB1CAF /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				7D8A87CEC4997D3E5C06B12A /* FramePacketizer.swift */,
+				4A8FE9B5A9AF2711DD2944FD /* StreamServer.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
+		E963F30EA2CD02698DC0B454 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				40729672682021FD156CD8E3 /* Mac2DroidApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		329C47E1065F92BD67D8B8E0 /* Mac2Droid */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2E08AB59C732589FE2148BA4 /* Build configuration list for PBXNativeTarget "Mac2Droid" */;
+			buildPhases = (
+				CCA609022543D0D5BF9105BA /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Mac2Droid;
+			packageProductDependencies = (
+			);
+			productName = Mac2Droid;
+			productReference = 1AE51E9216F5A754E3F9B179 /* Mac2Droid.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		71751F3F400615D385F61B4D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					329C47E1065F92BD67D8B8E0 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 07059930A53A1935F0A35A8C /* Build configuration list for PBXProject "Mac2Droid" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 739BA07CF3AFC3D43D4FA885;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				329C47E1065F92BD67D8B8E0 /* Mac2Droid */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CCA609022543D0D5BF9105BA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				086A17E6A45353D69F93B096 /* FrameHeader.swift in Sources */,
+				C84BE8450BCA90302333C7E4 /* FramePacketizer.swift in Sources */,
+				EFB4EB2321F270D5EEF46656 /* M2DProtocol.swift in Sources */,
+				AA8DB45052D987A90096E7FB /* Mac2DroidApp.swift in Sources */,
+				57286C354D78BEDE91FCAEC4 /* ScreenCaptureManager.swift in Sources */,
+				FB6C480E14486C268E513628 /* StreamConfig.swift in Sources */,
+				AA9CCD2A0EA7268D7A5A44D3 /* StreamServer.swift in Sources */,
+				A3EABF04A16DBF07FC181D87 /* VideoEncoder.swift in Sources */,
+				DB99E8EA4C50F41B275271D6 /* VirtualDisplayManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		44407F9DAEDADB027E411A0F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		BC9B51EB219665EA99DCD85D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		EB21E3DC50474AEAB775073B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Mac2Droid/Mac2Droid.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Mac2Droid/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.grkndev.mac2droid;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		FECF804C80AC38044AC8339B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Mac2Droid/Mac2Droid.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Mac2Droid/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.grkndev.mac2droid;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		07059930A53A1935F0A35A8C /* Build configuration list for PBXProject "Mac2Droid" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC9B51EB219665EA99DCD85D /* Debug */,
+				44407F9DAEDADB027E411A0F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2E08AB59C732589FE2148BA4 /* Build configuration list for PBXNativeTarget "Mac2Droid" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FECF804C80AC38044AC8339B /* Debug */,
+				EB21E3DC50474AEAB775073B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 71751F3F400615D385F61B4D /* Project object */;
+}

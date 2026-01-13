@@ -1,3 +1,11 @@
 /android-client/app/build/outputs
 /mac-server/.build
 /mac-server/.swiftpm
+
+# Build artifacts
+mac-server/build/
+*.app
+DerivedData/
+
+# IDE
+.idea/

@@ -78,7 +78,6 @@ final class AppState: ObservableObject {
 
     // MARK: - Private Properties
     private let pipeline = StreamPipeline()
-    private var virtualDisplayManager: Any?  // Type-erased for macOS 14+ compatibility
 
     // MARK: - Initialization
     init() {
@@ -120,15 +119,15 @@ final class AppState: ObservableObject {
     }
 
     func startStreaming() async {
-        // For extend mode, create virtual display first
-        if streamMode == .extend && !hasVirtualDisplay {
-            connectionStatus = "Creating virtual display..."
-            await createVirtualDisplay(
+        // For extend mode, ensure virtual display exists
+        if streamMode == .extend {
+            connectionStatus = "Preparing virtual display..."
+            await ensureVirtualDisplay(
                 width: selectedQuality.width,
                 height: selectedQuality.height
             )
 
-            // Check if virtual display was created
+            // Check if virtual display is ready
             if !hasVirtualDisplay {
                 connectionStatus = virtualDisplayError ?? "Failed to create virtual display"
                 return
@@ -163,10 +162,8 @@ final class AppState: ObservableObject {
         connectionStatus = "Ready"
         stopMonitoring()
 
-        // Clean up virtual display when stopping extend mode
-        if streamMode == .extend && hasVirtualDisplay {
-            destroyVirtualDisplay()
-        }
+        // Virtual display is kept alive for reuse (CGVirtualDisplay limitation)
+        // It will be cleaned up when app terminates
     }
 
     // MARK: - Virtual Display Methods
@@ -176,48 +173,52 @@ final class AppState: ObservableObject {
         isVirtualDisplayAvailable()
     }
 
-    /// Create a virtual display for use as a second monitor
-    func createVirtualDisplay(width: Int = 1920, height: Int = 1080) async {
+    /// Get or create virtual display for streaming
+    func ensureVirtualDisplay(width: Int = 1920, height: Int = 1080) async {
         virtualDisplayError = nil
 
         guard canCreateVirtualDisplay else {
             virtualDisplayError = "Virtual display requires macOS 14.0 or later"
-            print("[AppState] \(virtualDisplayError!)")
             return
         }
 
         if #available(macOS 14.0, *) {
-            let manager = VirtualDisplayManager()
-            virtualDisplayManager = manager
+            let manager = VirtualDisplayManager.shared
 
+            // Check if display already exists
+            if manager.hasDisplay, let existingID = manager.displayID {
+                virtualDisplayID = existingID
+                hasVirtualDisplay = true
+                print("[AppState] Reusing existing virtual display: \(existingID)")
+
+                // Make sure display is selected
+                await loadDisplays()
+                if let virtualDisplay = availableDisplays.first(where: { $0.displayID == existingID }) {
+                    selectedDisplay = virtualDisplay
+                }
+                return
+            }
+
+            // Create new display
             do {
                 let config = VirtualDisplayManager.DisplayConfig(width: width, height: height)
-                let displayID = try manager.createDisplay(config: config)
+                let displayID = try manager.getOrCreateDisplay(config: config)
 
                 virtualDisplayID = displayID
                 hasVirtualDisplay = true
                 virtualDisplayError = nil
 
-                // Wait a moment for the display to register with the system
-                try? await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second
+                // Wait for display to register
+                try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 second
 
-                // Refresh display list and auto-select the virtual display
+                // Refresh and select display
                 await loadDisplays()
 
-                // Find and select the virtual display
                 if let virtualDisplay = availableDisplays.first(where: { $0.displayID == displayID }) {
                     selectedDisplay = virtualDisplay
-                    print("[AppState] Virtual display created and selected: \(displayID)")
-                } else {
-                    // Virtual display created but not found in ScreenCaptureKit
-                    // This might happen if the display needs more time to register
-                    print("[AppState] Virtual display created (ID: \(displayID)) but not yet visible in ScreenCaptureKit")
-
-                    // Try to find any non-main display
-                    if let nonMainDisplay = availableDisplays.first(where: { $0.displayID != CGMainDisplayID() }) {
-                        selectedDisplay = nonMainDisplay
-                        print("[AppState] Selected alternative display: \(nonMainDisplay.displayID)")
-                    }
+                    print("[AppState] Virtual display ready: \(displayID)")
+                } else if let nonMainDisplay = availableDisplays.first(where: { $0.displayID != CGMainDisplayID() }) {
+                    selectedDisplay = nonMainDisplay
                 }
 
             } catch {
@@ -227,19 +228,15 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Remove the virtual display
+    /// Note: Virtual display persists until app quits (CGVirtualDisplay limitation)
     func destroyVirtualDisplay() {
-        if #available(macOS 14.0, *) {
-            if let manager = virtualDisplayManager as? VirtualDisplayManager {
-                manager.destroyDisplay()
-            }
-        }
-
-        virtualDisplayManager = nil
+        // CGVirtualDisplay cannot be destroyed at runtime
+        // It only gets cleaned up when the app terminates
+        // So we just update our state flags
         virtualDisplayID = nil
         hasVirtualDisplay = false
 
-        // Refresh displays and select main display
+        // Select main display
         Task {
             await loadDisplays()
             selectedDisplay = availableDisplays.first(where: { $0.displayID == CGMainDisplayID() })
@@ -311,15 +308,17 @@ struct MenuBarView: View {
 
                 Picker("", selection: $appState.streamMode) {
                     ForEach(StreamMode.allCases, id: \.self) { mode in
-                        HStack {
-                            Image(systemName: mode.icon)
-                            Text(mode.rawValue)
-                        }
-                        .tag(mode)
+                        Text(mode.rawValue).tag(mode)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
+                .onChange(of: appState.streamMode) { oldValue, newValue in
+                    // Clean up virtual display when switching to mirror mode
+                    if newValue == .mirror && appState.hasVirtualDisplay {
+                        appState.destroyVirtualDisplay()
+                    }
+                }
 
                 Text(appState.streamMode.description)
                     .font(.caption2)
@@ -406,7 +405,12 @@ struct MenuBarView: View {
             // Action button
             Button(appState.isStreaming ? "Stop Streaming" : "Start Streaming") {
                 Task {
-                    await appState.toggleStreaming()
+                    if appState.isStreaming {
+                        // Explicitly stop and destroy virtual display
+                        await appState.stopStreaming()
+                    } else {
+                        await appState.startStreaming()
+                    }
                 }
             }
             .keyboardShortcut(.defaultAction)
