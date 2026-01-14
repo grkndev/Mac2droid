@@ -34,7 +34,7 @@
             android:name=".ui.StreamActivity"
             android:exported="false"
             android:theme="@style/Theme.Mac2Droid.Fullscreen"
-            android:screenOrientation="landscape"
+            android:screenOrientation="fullUser"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
 
     </application>

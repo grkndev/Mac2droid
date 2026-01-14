@@ -56,15 +56,25 @@ final class VirtualDisplayManager: ObservableObject {
             return existingID
         }
 
-        // If display exists but config is different, we can't change it
-        // Just return the existing one
-        if isActive, let existingID = displayID {
-            print("[VirtualDisplay] Display already exists with different config, reusing ID: \(existingID)")
-            return existingID
+        // If display exists but config is different, destroy and recreate
+        if isActive, displayID != nil, currentConfig != config {
+            print("[VirtualDisplay] Config changed, destroying old display and creating new one")
+            destroyDisplay()
         }
 
         // Create new display
         return try createDisplay(config: config)
+    }
+
+    /// Destroy the current virtual display
+    func destroyDisplay() {
+        print("[VirtualDisplay] Destroying virtual display")
+        displayRef = nil
+        descriptorRef = nil
+        settingsRef = nil
+        displayID = nil
+        isActive = false
+        currentConfig = nil
     }
 
     /// Create a virtual display with the specified configuration

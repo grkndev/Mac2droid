@@ -26,6 +26,52 @@ enum StreamMode: String, CaseIterable {
     }
 }
 
+// MARK: - Resolution Option
+enum ResolutionOption: String, CaseIterable {
+    case deviceLandscape = "Device (Landscape)"
+    case devicePortrait = "Device (Portrait)"
+    case hd720 = "720p (1280x720)"
+    case hd720Portrait = "720p Portrait (720x1280)"
+    case fhd1080 = "1080p (1920x1080)"
+    case fhd1080Portrait = "1080p Portrait (1080x1920)"
+    case qhd1440 = "1440p (2560x1440)"
+
+    var isDeviceNative: Bool {
+        self == .deviceLandscape || self == .devicePortrait
+    }
+
+    var isPortrait: Bool {
+        switch self {
+        case .devicePortrait, .hd720Portrait, .fhd1080Portrait:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var width: Int {
+        switch self {
+        case .deviceLandscape, .devicePortrait: return 0  // Will use device resolution
+        case .hd720: return 1280
+        case .hd720Portrait: return 720
+        case .fhd1080: return 1920
+        case .fhd1080Portrait: return 1080
+        case .qhd1440: return 2560
+        }
+    }
+
+    var height: Int {
+        switch self {
+        case .deviceLandscape, .devicePortrait: return 0
+        case .hd720: return 720
+        case .hd720Portrait: return 1280
+        case .fhd1080: return 1080
+        case .fhd1080Portrait: return 1920
+        case .qhd1440: return 1440
+        }
+    }
+}
+
 // MARK: - Android Device
 struct AndroidDevice: Equatable {
     let serialNumber: String
@@ -65,6 +111,26 @@ struct AndroidDevice: Equatable {
     }
 }
 
+// MARK: - Device Orientation
+enum DeviceOrientation: Int {
+    case portrait = 0           // Normal portrait
+    case landscape = 1          // Landscape (90° clockwise)
+    case portraitReverse = 2    // Upside down portrait
+    case landscapeReverse = 3   // Landscape (90° counter-clockwise)
+
+    var isLandscape: Bool {
+        self == .landscape || self == .landscapeReverse
+    }
+
+    var isPortrait: Bool {
+        self == .portrait || self == .portraitReverse
+    }
+
+    static func from(rotation: Int) -> DeviceOrientation {
+        return DeviceOrientation(rawValue: rotation) ?? .portrait
+    }
+}
+
 // MARK: - ADB Manager
 @MainActor
 final class ADBManager: ObservableObject {
@@ -73,8 +139,13 @@ final class ADBManager: ObservableObject {
     @Published private(set) var connectedDevice: AndroidDevice?
     @Published private(set) var isMonitoring = false
     @Published private(set) var lastError: String?
+    @Published private(set) var currentOrientation: DeviceOrientation = .portrait
 
     private var monitorTask: Task<Void, Never>?
+    private var orientationTask: Task<Void, Never>?
+
+    /// Callback when orientation changes
+    var onOrientationChanged: ((DeviceOrientation) -> Void)?
 
     private init() {}
 
@@ -95,7 +166,61 @@ final class ADBManager: ObservableObject {
     func stopMonitoring() {
         monitorTask?.cancel()
         monitorTask = nil
+        orientationTask?.cancel()
+        orientationTask = nil
         isMonitoring = false
+    }
+
+    /// Start monitoring device orientation changes
+    func startOrientationMonitoring() {
+        orientationTask?.cancel()
+        orientationTask = Task {
+            while !Task.isCancelled {
+                if let orientation = await fetchCurrentOrientation() {
+                    if orientation != currentOrientation {
+                        let oldOrientation = currentOrientation
+                        currentOrientation = orientation
+                        print("[ADB] Orientation changed: \(oldOrientation) -> \(orientation)")
+                        onOrientationChanged?(orientation)
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            }
+        }
+    }
+
+    func stopOrientationMonitoring() {
+        orientationTask?.cancel()
+        orientationTask = nil
+    }
+
+    /// Fetch current device orientation
+    func fetchCurrentOrientation() async -> DeviceOrientation? {
+        guard let serial = connectedDevice?.serialNumber else { return nil }
+
+        do {
+            // Use shell command with proper escaping for grep
+            let output = try await runCommand(["-s", serial, "shell", "dumpsys window | grep mCurrentRotation"])
+
+            // Parse rotation: "mCurrentRotation=1" or "mCurrentRotation=ROTATION_90"
+            if let match = output.range(of: #"mCurrentRotation=(\d)"#, options: .regularExpression) {
+                let rotationStr = String(output[match])
+                if let lastChar = rotationStr.last, let rotation = Int(String(lastChar)) {
+                    return DeviceOrientation.from(rotation: rotation)
+                }
+            }
+
+            // Try alternative format: ROTATION_0, ROTATION_90, etc.
+            if output.contains("ROTATION_0") { return .portrait }
+            if output.contains("ROTATION_90") { return .landscape }
+            if output.contains("ROTATION_180") { return .portraitReverse }
+            if output.contains("ROTATION_270") { return .landscapeReverse }
+
+        } catch {
+            print("[ADB] Failed to fetch orientation: \(error)")
+        }
+
+        return nil
     }
 
     func refreshDevice() async {
@@ -122,6 +247,33 @@ final class ADBManager: ObservableObject {
             connectedDevice = nil
             print("[ADB] Error fetching device info: \(error)")
         }
+    }
+
+    /// Fetch current screen size from device (respects current orientation)
+    func fetchCurrentScreenSize() async -> (width: Int, height: Int)? {
+        guard let device = connectedDevice else { return nil }
+
+        // Get current orientation
+        let orientation = await fetchCurrentOrientation() ?? currentOrientation
+
+        // Get physical dimensions (always portrait-based from device info)
+        let shortSide = min(device.screenWidth, device.screenHeight)
+        let longSide = max(device.screenWidth, device.screenHeight)
+
+        // Determine final dimensions based on orientation
+        let width: Int
+        let height: Int
+
+        if orientation.isLandscape {
+            width = longSide
+            height = shortSide
+        } else {
+            width = shortSide
+            height = longSide
+        }
+
+        print("[ADB] Orientation: \(orientation), final size: \(width)x\(height)")
+        return (width, height)
     }
 
     // MARK: - ADB Commands
@@ -270,6 +422,7 @@ final class AppState: ObservableObject {
     // MARK: - Published Properties
     @Published var selectedDisplay: SCDisplay?
     @Published var selectedQuality: M2DQuality = .balanced
+    @Published var selectedResolution: ResolutionOption = .deviceLandscape
     @Published var showCursor = true
     @Published var streamMode: StreamMode = .mirror
     @Published var autoAdjustQuality = true
@@ -401,10 +554,12 @@ final class AppState: ObservableObject {
         // For extend mode, ensure virtual display exists
         if streamMode == .extend {
             connectionStatus = "Preparing virtual display..."
-            await ensureVirtualDisplay(
-                width: selectedQuality.width,
-                height: selectedQuality.height
-            )
+
+            // Get resolution based on user selection
+            let (width, height) = virtualDisplayResolution
+            print("[AppState] Using resolution: \(width)x\(height) (\(selectedResolution.rawValue))")
+
+            await ensureVirtualDisplay(width: width, height: height)
 
             // Check if virtual display is ready
             if !hasVirtualDisplay {
@@ -429,6 +584,14 @@ final class AppState: ObservableObject {
         var config = StreamConfig(displayID: display.displayID, quality: selectedQuality)
         config.showCursor = showCursor
         config.serverPort = UInt16(adbPort) ?? M2DProtocol.defaultPort
+
+        // For extend mode, use virtual display resolution instead of quality preset
+        if streamMode == .extend {
+            let (width, height) = virtualDisplayResolution
+            config.captureWidth = width
+            config.captureHeight = height
+            print("[AppState] Capture resolution set to: \(width)x\(height)")
+        }
 
         do {
             connectionStatus = "Starting..."
@@ -537,6 +700,32 @@ final class AppState: ObservableObject {
     /// Check if virtual display feature is available (macOS 14+)
     var canCreateVirtualDisplay: Bool {
         isVirtualDisplayAvailable()
+    }
+
+    /// Calculate virtual display resolution based on selected option and device
+    var virtualDisplayResolution: (width: Int, height: Int) {
+        if selectedResolution.isDeviceNative, let device = connectedDevice {
+            // Get device dimensions
+            let shortSide = min(device.screenWidth, device.screenHeight)
+            let longSide = max(device.screenWidth, device.screenHeight)
+
+            // Return based on selected orientation
+            if selectedResolution == .devicePortrait {
+                return (shortSide, longSide)
+            } else {
+                return (longSide, shortSide)
+            }
+        } else if selectedResolution.isDeviceNative {
+            // Fallback if no device connected
+            if selectedResolution == .devicePortrait {
+                return (1080, 1920)
+            } else {
+                return (1920, 1080)
+            }
+        } else {
+            // Use selected preset
+            return (selectedResolution.width, selectedResolution.height)
+        }
     }
 
     /// Get or create virtual display for streaming
@@ -721,6 +910,34 @@ struct MenuBarView: View {
                             ForEach(appState.availableDisplays, id: \.displayID) { display in
                                 Text(displayName(for: display))
                                     .tag(display as SCDisplay?)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity
+                    ))
+                }
+
+                // Resolution picker (only for Extend mode)
+                if appState.streamMode == .extend {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Resolution")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Picker("", selection: $appState.selectedResolution) {
+                            ForEach(ResolutionOption.allCases, id: \.self) { option in
+                                if option.isDeviceNative, let device = appState.connectedDevice {
+                                    let shortSide = min(device.screenWidth, device.screenHeight)
+                                    let longSide = max(device.screenWidth, device.screenHeight)
+                                    let resolution = option == .devicePortrait ? "\(shortSide)x\(longSide)" : "\(longSide)x\(shortSide)"
+                                    Text("\(option.rawValue) (\(resolution))").tag(option)
+                                } else {
+                                    Text(option.rawValue).tag(option)
+                                }
                             }
                         }
                         .labelsHidden()
