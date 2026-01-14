@@ -296,6 +296,7 @@ final class AppState: ObservableObject {
     // MARK: - Private Properties
     private let pipeline = StreamPipeline()
     private var deviceObserver: AnyCancellable?
+    private var lastKnownDeviceSerial: String?
 
     // MARK: - Initialization
     init() {
@@ -329,17 +330,47 @@ final class AppState: ObservableObject {
     // MARK: - Device Handling
 
     private func handleDeviceChange(_ device: AndroidDevice?) {
+        let previousSerial = lastKnownDeviceSerial
+        lastKnownDeviceSerial = device?.serialNumber
+
+        // Device disconnected
         guard let device = device else {
-            connectionStatus = "No device"
+            if isStreaming {
+                connectionStatus = "Device disconnected - waiting for reconnect..."
+                print("[AppState] Device disconnected during stream")
+            } else {
+                connectionStatus = "No device"
+            }
             return
         }
 
-        connectionStatus = "Ready"
+        // Device connected/reconnected
+        let wasDisconnected = previousSerial == nil
+        let isNewDevice = previousSerial != nil && previousSerial != device.serialNumber
 
-        // Auto-adjust quality based on device resolution
-        if autoAdjustQuality {
-            selectedQuality = device.suggestedQuality
-            print("[AppState] Auto-adjusted quality to \(selectedQuality) for \(device.resolution)")
+        if isStreaming && (wasDisconnected || isNewDevice) {
+            connectionStatus = "Reconnecting..."
+            print("[AppState] Device reconnected during stream, re-establishing connection...")
+            Task {
+                // Small delay to let ADB stabilize
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                // Re-establish ADB reverse
+                await startAdb()
+                if isAdbActive {
+                    // Relaunch Android app
+                    await launchAndroidApp()
+                    connectionStatus = "Waiting for connection..."
+                } else {
+                    connectionStatus = "ADB failed - try again"
+                }
+            }
+        } else if !isStreaming {
+            connectionStatus = "Ready"
+            // Auto-adjust quality based on device resolution
+            if autoAdjustQuality {
+                selectedQuality = device.suggestedQuality
+                print("[AppState] Auto-adjusted quality to \(selectedQuality) for \(device.resolution)")
+            }
         }
 
         objectWillChange.send()
