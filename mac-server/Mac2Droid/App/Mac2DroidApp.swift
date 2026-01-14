@@ -403,6 +403,11 @@ final class AppState: ObservableObject {
             connectionStatus = "Starting..."
             try await pipeline.start(config: config)
             isStreaming = true
+            connectionStatus = "Launching app..."
+
+            // Launch Android app with auto-connect
+            await launchAndroidApp()
+
             connectionStatus = "Waiting for connection..."
 
             // Start monitoring
@@ -412,6 +417,25 @@ final class AppState: ObservableObject {
             print("[AppState] Start error: \(error)")
             // Stop ADB if stream failed
             await stopAdb()
+        }
+    }
+
+    /// Launch Android app with auto-connect intent
+    func launchAndroidApp() async {
+        let port = adbPort.isEmpty ? "5555" : adbPort
+
+        do {
+            // Launch app with auto_connect extra
+            let result = try await adbManager.runCommand([
+                "shell", "am", "start",
+                "-n", "com.mac2droid/.MainActivity",
+                "--es", "auto_connect", "true",
+                "--es", "port", port
+            ])
+            print("[ADB] Launch app result: \(result)")
+        } catch {
+            print("[ADB] Failed to launch app: \(error)")
+            // Non-fatal - user can manually open the app
         }
     }
 

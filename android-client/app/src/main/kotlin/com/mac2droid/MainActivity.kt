@@ -24,6 +24,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Check for auto-connect intent from Mac app
+        if (handleAutoConnect()) {
+            return // Skip UI, already starting StreamActivity
+        }
+
         setContent {
             Mac2DroidTheme {
                 Surface(
@@ -38,6 +43,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Handle auto-connect intent from Mac app
+     * @return true if auto-connect was triggered
+     */
+    private fun handleAutoConnect(): Boolean {
+        val autoConnect = intent.getStringExtra("auto_connect") == "true"
+        if (autoConnect) {
+            val port = intent.getStringExtra("port")?.toIntOrNull() ?: M2DProtocol.DEFAULT_PORT
+            Toast.makeText(this, "Connecting to Mac...", Toast.LENGTH_SHORT).show()
+            startStreaming("127.0.0.1", port)
+            finish() // Close MainActivity, only StreamActivity will be shown
+            return true
+        }
+        return false
     }
 
     private fun startStreaming(host: String, port: Int) {
