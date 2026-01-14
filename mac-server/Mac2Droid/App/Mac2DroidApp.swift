@@ -73,7 +73,7 @@ enum ResolutionOption: String, CaseIterable {
 }
 
 // MARK: - Android Device
-struct AndroidDevice: Equatable {
+struct AndroidDevice: Equatable, Hashable {
     let serialNumber: String
     let model: String
     let manufacturer: String
@@ -136,7 +136,9 @@ enum DeviceOrientation: Int {
 final class ADBManager: ObservableObject {
     static let shared = ADBManager()
 
-    @Published private(set) var connectedDevice: AndroidDevice?
+    @Published private(set) var connectedDevices: [AndroidDevice] = []
+    @Published var selectedDevice: AndroidDevice?
+    @Published var selectedDevices: Set<String> = []  // Serial numbers of selected devices
     @Published private(set) var isMonitoring = false
     @Published private(set) var lastError: String?
     @Published private(set) var currentOrientation: DeviceOrientation = .portrait
@@ -147,7 +149,39 @@ final class ADBManager: ObservableObject {
     /// Callback when orientation changes
     var onOrientationChanged: ((DeviceOrientation) -> Void)?
 
+    /// Callback when devices change
+    var onDevicesChanged: (([AndroidDevice]) -> Void)?
+
     private init() {}
+
+    // MARK: - Device Selection
+
+    /// Toggle device selection
+    func toggleDeviceSelection(_ device: AndroidDevice) {
+        if selectedDevices.contains(device.serialNumber) {
+            selectedDevices.remove(device.serialNumber)
+        } else {
+            selectedDevices.insert(device.serialNumber)
+        }
+
+        // Update primary selected device to first selected
+        if let firstSelectedSerial = selectedDevices.first,
+           let firstDevice = connectedDevices.first(where: { $0.serialNumber == firstSelectedSerial }) {
+            selectedDevice = firstDevice
+        } else if selectedDevices.isEmpty {
+            selectedDevice = nil
+        }
+    }
+
+    /// Check if device is selected
+    func isDeviceSelected(_ device: AndroidDevice) -> Bool {
+        selectedDevices.contains(device.serialNumber)
+    }
+
+    /// Get all selected devices
+    var allSelectedDevices: [AndroidDevice] {
+        connectedDevices.filter { selectedDevices.contains($0.serialNumber) }
+    }
 
     // MARK: - Public Methods
 
@@ -157,7 +191,7 @@ final class ADBManager: ObservableObject {
 
         monitorTask = Task {
             while !Task.isCancelled {
-                await refreshDevice()
+                await refreshDevices()
                 try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
             }
         }
@@ -196,7 +230,7 @@ final class ADBManager: ObservableObject {
 
     /// Fetch current device orientation
     func fetchCurrentOrientation() async -> DeviceOrientation? {
-        guard let serial = connectedDevice?.serialNumber else { return nil }
+        guard let serial = selectedDevice?.serialNumber else { return nil }
 
         do {
             // Use shell command with proper escaping for grep
@@ -223,35 +257,64 @@ final class ADBManager: ObservableObject {
         return nil
     }
 
-    func refreshDevice() async {
+    func refreshDevices() async {
         lastError = nil
 
-        // Check if any device is connected
-        guard let serial = await getConnectedDeviceSerial() else {
-            connectedDevice = nil
+        // Get all connected device serials
+        let serials = await getConnectedDeviceSerials()
+
+        if serials.isEmpty {
+            if !connectedDevices.isEmpty {
+                connectedDevices = []
+                selectedDevice = nil
+                onDevicesChanged?([])
+                print("[ADB] All devices disconnected")
+            }
             return
         }
 
-        // If same device, skip refresh
-        if connectedDevice?.serialNumber == serial {
-            return
+        // Check if device list changed
+        let currentSerials = Set(connectedDevices.map { $0.serialNumber })
+        let newSerials = Set(serials)
+
+        if currentSerials == newSerials {
+            return // No change
         }
 
-        // Fetch device info
-        do {
-            let device = try await fetchDeviceInfo(serial: serial)
-            connectedDevice = device
-            print("[ADB] Device connected: \(device.displayName) (\(device.resolution))")
-        } catch {
-            lastError = error.localizedDescription
-            connectedDevice = nil
-            print("[ADB] Error fetching device info: \(error)")
+        // Fetch info for all devices
+        var devices: [AndroidDevice] = []
+        for serial in serials {
+            do {
+                let device = try await fetchDeviceInfo(serial: serial)
+                devices.append(device)
+                print("[ADB] Device found: \(device.displayName) (\(device.resolution))")
+            } catch {
+                print("[ADB] Error fetching device info for \(serial): \(error)")
+            }
         }
+
+        connectedDevices = devices
+
+        // Remove disconnected devices from selection
+        let currentSerialSet = Set(devices.map { $0.serialNumber })
+        selectedDevices = selectedDevices.intersection(currentSerialSet)
+
+        // Auto-select first device if none selected or selected device disconnected
+        if selectedDevice == nil || !devices.contains(where: { $0.serialNumber == selectedDevice?.serialNumber }) {
+            selectedDevice = devices.first
+            // Also add to selectedDevices if empty
+            if selectedDevices.isEmpty, let first = devices.first {
+                selectedDevices.insert(first.serialNumber)
+            }
+        }
+
+        onDevicesChanged?(devices)
+        print("[ADB] \(devices.count) device(s) connected")
     }
 
     /// Fetch current screen size from device (respects current orientation)
     func fetchCurrentScreenSize() async -> (width: Int, height: Int)? {
-        guard let device = connectedDevice else { return nil }
+        guard let device = selectedDevice else { return nil }
 
         // Get current orientation
         let orientation = await fetchCurrentOrientation() ?? currentOrientation
@@ -310,20 +373,21 @@ final class ADBManager: ObservableObject {
 
     // MARK: - Private Methods
 
-    private func getConnectedDeviceSerial() async -> String? {
+    private func getConnectedDeviceSerials() async -> [String] {
         do {
             let output = try await runCommand(["devices"])
             let lines = output.components(separatedBy: "\n")
 
+            var serials: [String] = []
             for line in lines {
                 let parts = line.components(separatedBy: "\t")
                 if parts.count >= 2 && parts[1] == "device" {
-                    return parts[0]
+                    serials.append(parts[0])
                 }
             }
-            return nil
+            return serials
         } catch {
-            return nil
+            return []
         }
     }
 
@@ -393,8 +457,6 @@ struct Mac2DroidApp: App {
     private var menuBarIcon: String {
         if appState.isStreaming {
             return "display.2"
-        } else if appState.hasVirtualDisplay {
-            return "rectangle.on.rectangle"
         } else {
             return "display"
         }
@@ -444,7 +506,17 @@ final class AppState: ObservableObject {
 
     // Android device state
     let adbManager = ADBManager.shared
-    var connectedDevice: AndroidDevice? { adbManager.connectedDevice }
+    var connectedDevice: AndroidDevice? { adbManager.selectedDevice }
+    var connectedDevices: [AndroidDevice] { adbManager.connectedDevices }
+
+    var selectedDevice: AndroidDevice? {
+        get { adbManager.selectedDevice }
+        set { adbManager.selectedDevice = newValue }
+    }
+
+    var selectedDevices: [AndroidDevice] {
+        adbManager.allSelectedDevices
+    }
 
     // MARK: - Private Properties
     private let pipeline = StreamPipeline()
@@ -460,8 +532,8 @@ final class AppState: ObservableObject {
         // Start device monitoring
         adbManager.startMonitoring()
 
-        // Observe device changes for auto quality adjustment
-        deviceObserver = adbManager.$connectedDevice
+        // Observe selected device changes for auto quality adjustment
+        deviceObserver = adbManager.$selectedDevice
             .receive(on: DispatchQueue.main)
             .sink { [weak self] device in
                 self?.handleDeviceChange(device)
@@ -616,11 +688,15 @@ final class AppState: ObservableObject {
 
     /// Launch Android app with auto-connect intent
     func launchAndroidApp() async {
+        guard let device = connectedDevice else { return }
+
         let port = adbPort.isEmpty ? "5555" : adbPort
+        let serial = device.serialNumber
 
         do {
             // Launch app with auto_connect extra
             let result = try await adbManager.runCommand([
+                "-s", serial,
                 "shell", "am", "start",
                 "-n", "com.mac2droid/.MainActivity",
                 "--es", "auto_connect", "true",
@@ -653,15 +729,17 @@ final class AppState: ObservableObject {
         let port = adbPort.isEmpty ? "5555" : adbPort
 
         // Check if device is connected
-        guard connectedDevice != nil else {
+        guard let device = connectedDevice else {
             adbError = "No Android device connected"
             isAdbActive = false
             return
         }
 
+        let serial = device.serialNumber
+
         // First remove any existing forward (ignore errors if not exists)
         do {
-            let removeResult = try await adbManager.runCommand(["reverse", "--remove", "tcp:\(port)"])
+            let removeResult = try await adbManager.runCommand(["-s", serial, "reverse", "--remove", "tcp:\(port)"])
             print("[ADB] Remove result: \(removeResult)")
         } catch {
             // Ignore - reverse might not exist yet
@@ -670,11 +748,11 @@ final class AppState: ObservableObject {
 
         // Start reverse port forwarding
         do {
-            let result = try await adbManager.runCommand(["reverse", "tcp:\(port)", "tcp:\(port)"])
+            let result = try await adbManager.runCommand(["-s", serial, "reverse", "tcp:\(port)", "tcp:\(port)"])
             print("[ADB] Reverse result: \(result)")
 
             isAdbActive = true
-            print("[ADB] Started reverse on port \(port)")
+            print("[ADB] Started reverse on port \(port) for \(device.displayName)")
         } catch {
             adbError = "ADB error: \(error.localizedDescription)"
             isAdbActive = false
@@ -685,8 +763,15 @@ final class AppState: ObservableObject {
     func stopAdb() async {
         let port = adbPort.isEmpty ? "5555" : adbPort
 
+        guard let device = connectedDevice else {
+            isAdbActive = false
+            return
+        }
+
+        let serial = device.serialNumber
+
         do {
-            let result = try await adbManager.runCommand(["reverse", "--remove", "tcp:\(port)"])
+            let result = try await adbManager.runCommand(["-s", serial, "reverse", "--remove", "tcp:\(port)"])
             print("[ADB] Stop result: \(result)")
         } catch {
             print("[ADB] Stop error: \(error)")
@@ -844,9 +929,7 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Header with device info
-            if let device = appState.connectedDevice {
-                DeviceInfoCard(device: device)
-            } else {
+            if appState.connectedDevices.isEmpty {
                 // No device connected
                 HStack(spacing: 8) {
                     Image(systemName: "iphone.slash")
@@ -859,6 +942,12 @@ struct MenuBarView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+            } else if appState.connectedDevices.count == 1, let device = appState.connectedDevice {
+                // Single device - show card
+                DeviceInfoCard(device: device)
+            } else {
+                // Multiple devices - clickable header with submenu
+                DeviceSelectionMenuRow(appState: appState)
             }
 
             Divider()
@@ -1056,7 +1145,7 @@ struct MenuBarView: View {
                 title: appState.isStreaming ? "Stop Streaming" : "Start Streaming",
                 icon: appState.isStreaming ? "stop.fill" : "play.fill",
                 color: appState.isStreaming ? .red : .accentColor,
-                disabled: !appState.isStreaming && appState.connectedDevice == nil
+                disabled: !appState.isStreaming && appState.connectedDevices.isEmpty
             ) {
                 Task {
                     if appState.isStreaming {
@@ -1079,7 +1168,8 @@ struct MenuBarView: View {
         .animation(.easeInOut(duration: 0.2), value: appState.streamMode)
         .animation(.easeInOut(duration: 0.2), value: appState.isStreaming)
         .animation(.easeInOut(duration: 0.2), value: isSettingsExpanded)
-        .animation(.easeInOut(duration: 0.3), value: appState.connectedDevice)
+        .animation(.easeInOut(duration: 0.3), value: appState.connectedDevices.count)
+        .animation(.easeInOut(duration: 0.15), value: appState.adbManager.selectedDevices)
         .task {
             await appState.loadDisplays()
         }
@@ -1089,7 +1179,7 @@ struct MenuBarView: View {
         if appState.isStreaming {
             return .green
         }
-        if appState.connectedDevice == nil {
+        if appState.connectedDevices.isEmpty {
             return .red
         }
         return appState.connectionStatus == "Ready" ? .gray : .orange
@@ -1102,9 +1192,217 @@ struct MenuBarView: View {
     }
 }
 
+// MARK: - Device Selection Submenu (Native-style hover submenu)
+struct DeviceSelectionMenuRow: View {
+    @ObservedObject var appState: AppState
+    @State private var isHovered = false
+    @State private var isSubmenuVisible = false
+    @State private var isSubmenuHovered = false
+    @State private var submenuWindow: NSWindow?
+    @State private var hoverWorkItem: DispatchWorkItem?
+    @State private var rowFrame: CGRect = .zero
+
+    private var isActive: Bool {
+        isHovered || isSubmenuVisible || isSubmenuHovered
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "ipad.and.iphone")
+                .foregroundColor(isActive ? .white : .accentColor)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(appState.connectedDevices.count) Devices")
+                    .font(.headline)
+                Text("\(appState.adbManager.selectedDevices.count) selected")
+                    .font(.caption2)
+                    .foregroundColor(isActive ? .white.opacity(0.7) : .secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(isActive ? .white.opacity(0.7) : .secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isActive ? Color.accentColor : Color.clear)
+        )
+        .foregroundColor(isActive ? .white : .primary)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+
+            // Cancel any pending work
+            hoverWorkItem?.cancel()
+
+            if hovering {
+                // Show submenu immediately
+                showSubmenu()
+            } else {
+                // Hide submenu after short delay (allows moving to submenu)
+                let workItem = DispatchWorkItem { [self] in
+                    if !isSubmenuHovered {
+                        hideSubmenu()
+                    }
+                }
+                hoverWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
+            }
+        }
+        .background(
+            GeometryReader { geometry in
+                Color.clear
+                    .preference(key: RowFramePreferenceKey.self, value: geometry.frame(in: .global))
+            }
+        )
+        .onPreferenceChange(RowFramePreferenceKey.self) { frame in
+            rowFrame = frame
+            if isSubmenuVisible, let window = submenuWindow {
+                positionSubmenuWindow(window, relativeTo: frame)
+            }
+        }
+        .onDisappear {
+            hideSubmenu()
+        }
+    }
+
+    private func showSubmenu() {
+        guard submenuWindow == nil else { return }
+
+        let hostingView = NSHostingView(rootView:
+            DeviceSubmenuContent(
+                appState: appState,
+                onHover: { hovering in
+                    isSubmenuHovered = hovering
+                    if !hovering && !isHovered {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            if !isSubmenuHovered && !isHovered {
+                                hideSubmenu()
+                            }
+                        }
+                    }
+                }
+            )
+        )
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 220, height: 1),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.level = .popUpMenu
+        window.hasShadow = true
+
+        // Size to fit content
+        hostingView.layoutSubtreeIfNeeded()
+        let fittingSize = hostingView.fittingSize
+        window.setContentSize(fittingSize)
+
+        // Position to the right of the parent window
+        if let parentWindow = NSApp.keyWindow ?? NSApp.mainWindow {
+            let parentFrame = parentWindow.frame
+            let windowFrame = NSRect(
+                x: parentFrame.maxX + 4,
+                y: parentFrame.maxY - fittingSize.height,
+                width: fittingSize.width,
+                height: fittingSize.height
+            )
+            window.setFrame(windowFrame, display: true)
+        }
+
+        window.orderFront(nil)
+        submenuWindow = window
+        isSubmenuVisible = true
+    }
+
+    private func hideSubmenu() {
+        submenuWindow?.orderOut(nil)
+        submenuWindow = nil
+        isSubmenuVisible = false
+    }
+
+    private func positionSubmenuWindow(_ window: NSWindow, relativeTo rowFrame: CGRect) {
+        guard let screen = NSScreen.main else { return }
+        let screenFrame = screen.frame
+
+        let windowSize = window.frame.size
+        var x = rowFrame.maxX + 4
+        var y = screenFrame.height - rowFrame.maxY
+
+        // If submenu would go off right edge, show on left
+        if x + windowSize.width > screenFrame.maxX {
+            x = rowFrame.minX - windowSize.width - 4
+        }
+
+        // Adjust vertical position to align with row
+        y = screenFrame.height - rowFrame.minY - windowSize.height
+
+        window.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+}
+
+// MARK: - Row Frame Preference Key
+struct RowFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
+// MARK: - Device Submenu Content
+struct DeviceSubmenuContent: View {
+    @ObservedObject var appState: AppState
+    var onHover: (Bool) -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(appState.connectedDevices, id: \.serialNumber) { device in
+                DeviceInfoCard(
+                    device: device,
+                    isSelectable: true,
+                    isSelected: appState.adbManager.isDeviceSelected(device),
+                    onTap: {
+                        appState.adbManager.toggleDeviceSelection(device)
+                    }
+                )
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+        )
+        .onHover { hovering in
+            isHovered = hovering
+            onHover(hovering)
+        }
+    }
+}
+
 // MARK: - Device Info Card
 struct DeviceInfoCard: View {
     let device: AndroidDevice
+    var isSelectable: Bool = false
+    var isSelected: Bool = false
+    var onTap: (() -> Void)? = nil
+
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -1116,21 +1414,49 @@ struct DeviceInfoCard: View {
 
             // Device info
             VStack(alignment: .leading, spacing: 2) {
-                Text(device.displayName)
+                Text(device.displayName.capitalized(with: Locale.current))
                     .font(.headline)
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
-                    Label(device.resolution, systemImage: "rectangle.dashed")
-                    Label("Android \(device.androidVersion)", systemImage: "apple.logo")
+                    Label(device.resolution, systemImage: "ipad.landscape")
+                    Label("Android \(device.androidVersion)", systemImage: "cpu")
                 }
                 .font(.caption2)
                 .foregroundColor(.secondary)
             }
 
             Spacer()
+
+            // Checkbox for selectable mode
+            if isSelectable {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                    .animation(.easeInOut(duration: 0.15), value: isSelected)
+            }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
+        .padding(.horizontal, isSelectable ? 8 : 0)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isSelectable ? (isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04)) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isSelected ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1.5)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isSelectable {
+                onTap?()
+            }
+        }
+        .onHover { hovering in
+            if isSelectable {
+                isHovered = hovering
+            }
+        }
     }
 
     private var deviceIcon: String {
