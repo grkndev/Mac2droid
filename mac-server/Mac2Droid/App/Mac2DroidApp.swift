@@ -1,5 +1,6 @@
 import SwiftUI
 import ScreenCaptureKit
+import Combine
 
 // MARK: - Stream Mode
 enum StreamMode: String, CaseIterable {
@@ -21,6 +22,212 @@ enum StreamMode: String, CaseIterable {
             return "rectangle.on.rectangle"
         case .extend:
             return "rectangle.split.2x1"
+        }
+    }
+}
+
+// MARK: - Android Device
+struct AndroidDevice: Equatable {
+    let serialNumber: String
+    let model: String
+    let manufacturer: String
+    let screenWidth: Int
+    let screenHeight: Int
+    let density: Int
+    let androidVersion: String
+
+    var displayName: String {
+        if manufacturer.lowercased() == "samsung" {
+            return "\(manufacturer) \(model)"
+        }
+        return model.isEmpty ? serialNumber : model
+    }
+
+    var resolution: String {
+        "\(screenWidth)x\(screenHeight)"
+    }
+
+    var aspectRatio: Double {
+        guard screenHeight > 0 else { return 0 }
+        return Double(screenWidth) / Double(screenHeight)
+    }
+
+    /// Suggest best quality based on device resolution
+    var suggestedQuality: M2DQuality {
+        let maxDimension = max(screenWidth, screenHeight)
+        if maxDimension >= 1920 {
+            return .quality
+        } else if maxDimension >= 1080 {
+            return .balanced
+        } else {
+            return .performance
+        }
+    }
+}
+
+// MARK: - ADB Manager
+@MainActor
+final class ADBManager: ObservableObject {
+    static let shared = ADBManager()
+
+    @Published private(set) var connectedDevice: AndroidDevice?
+    @Published private(set) var isMonitoring = false
+    @Published private(set) var lastError: String?
+
+    private var monitorTask: Task<Void, Never>?
+
+    private init() {}
+
+    // MARK: - Public Methods
+
+    func startMonitoring() {
+        guard !isMonitoring else { return }
+        isMonitoring = true
+
+        monitorTask = Task {
+            while !Task.isCancelled {
+                await refreshDevice()
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+            }
+        }
+    }
+
+    func stopMonitoring() {
+        monitorTask?.cancel()
+        monitorTask = nil
+        isMonitoring = false
+    }
+
+    func refreshDevice() async {
+        lastError = nil
+
+        // Check if any device is connected
+        guard let serial = await getConnectedDeviceSerial() else {
+            connectedDevice = nil
+            return
+        }
+
+        // If same device, skip refresh
+        if connectedDevice?.serialNumber == serial {
+            return
+        }
+
+        // Fetch device info
+        do {
+            let device = try await fetchDeviceInfo(serial: serial)
+            connectedDevice = device
+            print("[ADB] Device connected: \(device.displayName) (\(device.resolution))")
+        } catch {
+            lastError = error.localizedDescription
+            connectedDevice = nil
+            print("[ADB] Error fetching device info: \(error)")
+        }
+    }
+
+    // MARK: - ADB Commands
+
+    func runCommand(_ arguments: [String]) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                let pipe = Pipe()
+
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                process.arguments = ["adb"] + arguments
+                process.standardOutput = pipe
+                process.standardError = pipe
+
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+                    if process.terminationStatus == 0 {
+                        continuation.resume(returning: output)
+                    } else {
+                        continuation.resume(throwing: ADBError.commandFailed(output))
+                    }
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    // MARK: - Private Methods
+
+    private func getConnectedDeviceSerial() async -> String? {
+        do {
+            let output = try await runCommand(["devices"])
+            let lines = output.components(separatedBy: "\n")
+
+            for line in lines {
+                let parts = line.components(separatedBy: "\t")
+                if parts.count >= 2 && parts[1] == "device" {
+                    return parts[0]
+                }
+            }
+            return nil
+        } catch {
+            return nil
+        }
+    }
+
+    private func fetchDeviceInfo(serial: String) async throws -> AndroidDevice {
+        async let modelResult = runCommand(["-s", serial, "shell", "getprop", "ro.product.model"])
+        async let manufacturerResult = runCommand(["-s", serial, "shell", "getprop", "ro.product.manufacturer"])
+        async let versionResult = runCommand(["-s", serial, "shell", "getprop", "ro.build.version.release"])
+        async let sizeResult = runCommand(["-s", serial, "shell", "wm", "size"])
+        async let densityResult = runCommand(["-s", serial, "shell", "wm", "density"])
+
+        let model = (try? await modelResult) ?? "Unknown"
+        let manufacturer = (try? await manufacturerResult) ?? "Unknown"
+        let version = (try? await versionResult) ?? "Unknown"
+        let sizeOutput = (try? await sizeResult) ?? ""
+        let densityOutput = (try? await densityResult) ?? ""
+
+        // Parse screen size: "Physical size: 1200x1920"
+        var width = 0, height = 0
+        if let match = sizeOutput.range(of: #"(\d+)x(\d+)"#, options: .regularExpression) {
+            let sizeStr = String(sizeOutput[match])
+            let parts = sizeStr.components(separatedBy: "x")
+            if parts.count == 2 {
+                width = Int(parts[0]) ?? 0
+                height = Int(parts[1]) ?? 0
+            }
+        }
+
+        // Parse density: "Physical density: 240"
+        var density = 0
+        if let match = densityOutput.range(of: #"(\d+)"#, options: .regularExpression) {
+            density = Int(densityOutput[match]) ?? 0
+        }
+
+        return AndroidDevice(
+            serialNumber: serial,
+            model: model,
+            manufacturer: manufacturer,
+            screenWidth: width,
+            screenHeight: height,
+            density: density,
+            androidVersion: version
+        )
+    }
+}
+
+// MARK: - ADB Error
+enum ADBError: LocalizedError {
+    case commandFailed(String)
+    case noDevice
+
+    var errorDescription: String? {
+        switch self {
+        case .commandFailed(let output):
+            return output.isEmpty ? "ADB command failed" : output
+        case .noDevice:
+            return "No Android device connected"
         }
     }
 }
@@ -65,6 +272,7 @@ final class AppState: ObservableObject {
     @Published var selectedQuality: M2DQuality = .balanced
     @Published var showCursor = true
     @Published var streamMode: StreamMode = .mirror
+    @Published var autoAdjustQuality = true
 
     // ADB Settings
     @Published var adbPort: String = "5555"
@@ -81,8 +289,13 @@ final class AppState: ObservableObject {
     @Published private(set) var virtualDisplayID: CGDirectDisplayID?
     @Published private(set) var virtualDisplayError: String?
 
+    // Android device state
+    let adbManager = ADBManager.shared
+    var connectedDevice: AndroidDevice? { adbManager.connectedDevice }
+
     // MARK: - Private Properties
     private let pipeline = StreamPipeline()
+    private var deviceObserver: AnyCancellable?
 
     // MARK: - Initialization
     init() {
@@ -90,16 +303,46 @@ final class AppState: ObservableObject {
             await loadDisplays()
         }
 
-        // Register for app termination to cleanup virtual display
+        // Start device monitoring
+        adbManager.startMonitoring()
+
+        // Observe device changes for auto quality adjustment
+        deviceObserver = adbManager.$connectedDevice
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] device in
+                self?.handleDeviceChange(device)
+            }
+
+        // Register for app termination to cleanup
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                self?.adbManager.stopMonitoring()
                 self?.destroyVirtualDisplay()
             }
         }
+    }
+
+    // MARK: - Device Handling
+
+    private func handleDeviceChange(_ device: AndroidDevice?) {
+        guard let device = device else {
+            connectionStatus = "No device"
+            return
+        }
+
+        connectionStatus = "Ready"
+
+        // Auto-adjust quality based on device resolution
+        if autoAdjustQuality {
+            selectedQuality = device.suggestedQuality
+            print("[AppState] Auto-adjusted quality to \(selectedQuality) for \(device.resolution)")
+        }
+
+        objectWillChange.send()
     }
 
     // MARK: - Public Methods
@@ -191,9 +434,16 @@ final class AppState: ObservableObject {
         adbError = nil
         let port = adbPort.isEmpty ? "5555" : adbPort
 
+        // Check if device is connected
+        guard connectedDevice != nil else {
+            adbError = "No Android device connected"
+            isAdbActive = false
+            return
+        }
+
         // First remove any existing forward (ignore errors if not exists)
         do {
-            let removeResult = try await runCommand("adb", arguments: ["reverse", "--remove", "tcp:\(port)"])
+            let removeResult = try await adbManager.runCommand(["reverse", "--remove", "tcp:\(port)"])
             print("[ADB] Remove result: \(removeResult)")
         } catch {
             // Ignore - reverse might not exist yet
@@ -202,7 +452,7 @@ final class AppState: ObservableObject {
 
         // Start reverse port forwarding
         do {
-            let result = try await runCommand("adb", arguments: ["reverse", "tcp:\(port)", "tcp:\(port)"])
+            let result = try await adbManager.runCommand(["reverse", "tcp:\(port)", "tcp:\(port)"])
             print("[ADB] Reverse result: \(result)")
 
             isAdbActive = true
@@ -218,47 +468,13 @@ final class AppState: ObservableObject {
         let port = adbPort.isEmpty ? "5555" : adbPort
 
         do {
-            let result = try await runCommand("adb", arguments: ["reverse", "--remove", "tcp:\(port)"])
+            let result = try await adbManager.runCommand(["reverse", "--remove", "tcp:\(port)"])
             print("[ADB] Stop result: \(result)")
         } catch {
             print("[ADB] Stop error: \(error)")
         }
 
         isAdbActive = false
-    }
-
-    private func runCommand(_ command: String, arguments: [String]) async throws -> String {
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                let pipe = Pipe()
-
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                process.arguments = [command] + arguments
-                process.standardOutput = pipe
-                process.standardError = pipe
-
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let output = String(data: data, encoding: .utf8) ?? ""
-
-                    if process.terminationStatus == 0 {
-                        continuation.resume(returning: output)
-                    } else {
-                        continuation.resume(throwing: NSError(
-                            domain: "ADB",
-                            code: Int(process.terminationStatus),
-                            userInfo: [NSLocalizedDescriptionKey: output.isEmpty ? "Command failed" : output]
-                        ))
-                    }
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
     }
 
     // MARK: - Virtual Display Methods
@@ -383,17 +599,35 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Header
+            // Header with device info
+            if let device = appState.connectedDevice {
+                DeviceInfoCard(device: device)
+            } else {
+                // No device connected
+                HStack(spacing: 8) {
+                    Image(systemName: "iphone.slash")
+                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No Device")
+                            .font(.headline)
+                        Text("Connect Android via USB")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Divider()
+
+            // Status
             HStack {
                 Circle()
                     .fill(statusColor)
-                    .frame(width: 8, height: 8)
+                    .frame(width: 6, height: 6)
                 Text(appState.connectionStatus)
-                    .font(.headline)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
-            .padding(.bottom, 4)
-
-            Divider()
 
             // Settings when not streaming
             if !appState.isStreaming {
@@ -471,6 +705,10 @@ struct MenuBarView: View {
                                 .frame(width: 70)
                         }
 
+                        // Auto quality toggle
+                        Toggle("Auto quality", isOn: $appState.autoAdjustQuality)
+                            .font(.caption)
+
                         // ADB Status
                         HStack {
                             Circle()
@@ -545,7 +783,8 @@ struct MenuBarView: View {
             MenuRowButton(
                 title: appState.isStreaming ? "Stop Streaming" : "Start Streaming",
                 icon: appState.isStreaming ? "stop.fill" : "play.fill",
-                color: appState.isStreaming ? .red : .accentColor
+                color: appState.isStreaming ? .red : .accentColor,
+                disabled: !appState.isStreaming && appState.connectedDevice == nil
             ) {
                 Task {
                     if appState.isStreaming {
@@ -568,6 +807,7 @@ struct MenuBarView: View {
         .animation(.easeInOut(duration: 0.2), value: appState.streamMode)
         .animation(.easeInOut(duration: 0.2), value: appState.isStreaming)
         .animation(.easeInOut(duration: 0.2), value: isSettingsExpanded)
+        .animation(.easeInOut(duration: 0.3), value: appState.connectedDevice)
         .task {
             await appState.loadDisplays()
         }
@@ -576,6 +816,9 @@ struct MenuBarView: View {
     private var statusColor: Color {
         if appState.isStreaming {
             return .green
+        }
+        if appState.connectedDevice == nil {
+            return .red
         }
         return appState.connectionStatus == "Ready" ? .gray : .orange
     }
@@ -587,15 +830,60 @@ struct MenuBarView: View {
     }
 }
 
+// MARK: - Device Info Card
+struct DeviceInfoCard: View {
+    let device: AndroidDevice
+
+    var body: some View {
+        HStack(spacing: 10) {
+            // Device icon
+            Image(systemName: deviceIcon)
+                .font(.title2)
+                .foregroundColor(.accentColor)
+                .frame(width: 32)
+
+            // Device info
+            VStack(alignment: .leading, spacing: 2) {
+                Text(device.displayName)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                HStack(spacing: 8) {
+                    Label(device.resolution, systemImage: "rectangle.dashed")
+                    Label("Android \(device.androidVersion)", systemImage: "apple.logo")
+                }
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var deviceIcon: String {
+        // Use tablet icon for larger screens, phone for smaller
+        if device.screenWidth > 1000 || device.screenHeight > 1000 {
+            return "ipad"
+        }
+        return "iphone"
+    }
+}
+
 // MARK: - Menu Row Button
 struct MenuRowButton: View {
     let title: String
     var icon: String? = nil
     var shortcut: String? = nil
     var color: Color = .accentColor
+    var disabled: Bool = false
     let action: () -> Void
 
     @State private var isHovered = false
+
+    private var effectiveHovered: Bool {
+        isHovered && !disabled
+    }
 
     var body: some View {
         Button(action: action) {
@@ -609,7 +897,7 @@ struct MenuRowButton: View {
                 if let shortcut = shortcut {
                     Text(shortcut)
                         .font(.caption)
-                        .foregroundColor(isHovered ? .white.opacity(0.7) : .secondary)
+                        .foregroundColor(effectiveHovered ? .white.opacity(0.7) : .secondary)
                 }
             }
             .padding(.horizontal, 8)
@@ -617,11 +905,13 @@ struct MenuRowButton: View {
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 5)
-                    .fill(isHovered ? color.opacity(0.85) : Color.clear)
+                    .fill(effectiveHovered ? color.opacity(0.85) : Color.clear)
             )
-            .foregroundColor(isHovered ? .white : .primary)
+            .foregroundColor(disabled ? .secondary : (effectiveHovered ? .white : .primary))
+            .opacity(disabled ? 0.6 : 1)
         }
         .buttonStyle(.plain)
+        .disabled(disabled)
         .onHover { hovering in
             isHovered = hovering
         }
