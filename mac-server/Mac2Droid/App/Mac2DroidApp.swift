@@ -563,8 +563,8 @@ struct MenuBarView: View {
                 NSApplication.shared.terminate(nil)
             }
         }
-        .padding(12)
-        .frame(width: 280)
+        .padding(8)
+        .frame(width: 260)
         .animation(.easeInOut(duration: 0.2), value: appState.streamMode)
         .animation(.easeInOut(duration: 0.2), value: appState.isStreaming)
         .animation(.easeInOut(duration: 0.2), value: isSettingsExpanded)
@@ -612,8 +612,8 @@ struct MenuRowButton: View {
                         .foregroundColor(isHovered ? .white.opacity(0.7) : .secondary)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 5)
@@ -653,8 +653,8 @@ struct CollapsibleSection<Content: View>: View {
                         .font(.caption)
                     Spacer()
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
                 .frame(maxWidth: .infinity)
                 .background(
                     RoundedRectangle(cornerRadius: 4)
@@ -670,7 +670,7 @@ struct CollapsibleSection<Content: View>: View {
             // Content
             if isExpanded {
                 content()
-                    .padding(.leading, 16)
+                    .padding(.leading, 12)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
